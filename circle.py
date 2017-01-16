@@ -41,6 +41,18 @@ N = frames[0].shape[1]
 
 Mal = M - 48
 
+pts = []
+for i in range(48, M - 48, 48):
+    for j in range(48, N - 48, 48):
+        pts.append((i, j))
+
+pts = numpy.array(pts)
+
+plt.imshow(frames[0], interpolation = 'NONE')
+plt.plot(pts[:, 1], pts[:, 0], 'r+')
+plt.show()
+#%%
+
 for i in range(1, len(frames)):
     #tmp = time.time()
     f1 = frames[i][:360].copy()#skimage.color.rgb2hsv(frames[i1])
@@ -136,8 +148,8 @@ try:
         dxs.append(o)
 
         tmp = time.time()
-        for r in range(len(lnames)):
-            it[:, :, r] = mahotas.convolve(it[:, :, r], shapes[r]) / shapes[r].sum()
+        #for r in range(len(lnames)):
+        #    it[:, :, r] = mahotas.convolve(it[:, :, r], shapes[r]) / shapes[r].sum()
         #tmp = time.time()
 
         labels = numpy.argmax(it, axis = 2)
@@ -171,7 +183,7 @@ try:
         print 'mh', time.time() - tmp
 
         #mh.labeled_sum(array, labeled)
-        #plt.imshow(f1, interpolation = 'NONE')
+        plt.imshow(f1, interpolation = 'NONE')
         #plt.plot(coms[:, 1] * 8, coms[:, 0] * 8, 'o')
         #plt.show()
         #plt.imshow(labeled, interpolation = 'NONE')
@@ -179,9 +191,9 @@ try:
 
         #labels = labeled / 1.0
         labels = labels / float(refs.shape[1])
-        #plt.imshow(labels * refs.shape[1], interpolation = 'NONE', vmin = 0, vmax = refs.shape[1], extent = (0, f1.shape[1], f1.shape[0], 0), alpha = 0.5)
-        #plt.colorbar()
-        #plt.show()
+        plt.imshow(labels * refs.shape[1], interpolation = 'NONE', vmin = 0, vmax = refs.shape[1], extent = (0, f1.shape[1], f1.shape[0], 0), alpha = 0.5)
+        plt.colorbar()
+        plt.show()
         #labels = intensities[:, :, 2] / intensities[:, :, 2].max()
         labels = skimage.transform.resize(labels, (f1.shape[0], f1.shape[1]), order = 0)
 
