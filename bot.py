@@ -183,9 +183,10 @@ class Global(object):
                 if len(coords) > 0:
                     ds = [numpy.linalg.norm(coord - [20.0, 15.0]) for mass, coord in zip(sums, coords) if mass >= 2]
 
-                    closest = coords[numpy.argmin(ds)]
+                    if len(ds) > 0:
+                        closest = coords[numpy.argmin(ds)]
 
-                    d2click(int(closest[0] * 16) + 8, int(closest[1] * 16) + 8, 3)
+                        d2click(int(closest[0] * 16) + 8, int(closest[1] * 16) + 8, 3)
             if event.key == pygame.K_RIGHT:
                 self.current_label_idx = min(len(labels) - 1, self.current_label_idx + 1)
             if event.key == pygame.K_LEFT:
