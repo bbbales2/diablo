@@ -71,7 +71,7 @@ If Diablo 2 is running, try providing the window name as a '--windowName argumen
 If this doesn't work make sure xdotool can find the window with something like:
     xdotool search --name \"Diablo II.exe\"
 
-This should return some xids. If this doesn't work, I dunno haha"""
+This should return some xids."""
     exit(0)
 elif len(wids) == 1:
     wid = wids[0]
