@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import traceback
 import googlenet
 import mahotas
+import time
+import argparse
 
 pygame.init()
 
@@ -16,11 +18,13 @@ import subprocess
 import gtk
 import tensorflow as tf
 
-####
-#
+parser = argparse.ArgumentParser(description='Run a Diablo 2 bot')
+parser.add_argument('classifiersFile', help = 'File that has the trained classifiers')
+parser.add_argument('--windowName', type = str, default = "Diablo II.exe", help = 'Window name for the running Diablo 2')
+
 # These are some xtool helper functions
-#
-####
+
+args = parser.parse_args()
 
 def get_mouse_location():
     stdout, _ = subprocess.Popen('xdotool getmouselocation', shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
@@ -41,13 +45,9 @@ def refocus(y, x, window):
 
     _, _ = subprocess.Popen('xdotool windowfocus {0}'.format(window), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
 
-####
-#
 # Locate a running Diablo II.exe to latch on to
-#
-####
     
-sp = subprocess.Popen('xdotool search --name "Diablo II.exe"', shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
+sp = subprocess.Popen('xdotool search --name "{0}"'.format(args.windowName), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
 
 stdout, stderr = sp.communicate()
 
@@ -64,12 +64,20 @@ for line in stdout.split('\n'):
             pass
 
 if len(wids) == 0:
-    print "No Diablo 2 clients found. Please verify Diablo 2 is running and 'xdotool search --name \"Diablo II.exe\"' returns some valid window Xids"
+    print """No Diablo 2 clients found, please verify Diablo 2 is running
+
+If Diablo 2 is running, try providing the window name as a '--windowName argument'"
+
+If this doesn't work make sure xdotool can find the window with something like:
+    xdotool search --name \"Diablo II.exe\"
+
+This should return some xids. If this doesn't work, I dunno haha"""
     exit(0)
 elif len(wids) == 1:
     wid = wids[0]
 elif len(wids) > 1:
     print "Multiple Diablo 2 clients found, select which one to attach to"
+    print "This code is untested -- might not work. Why do you have multiple Diablo 2s running?"
 
     for i, wid in enumerate(wids):
         print "[{0}] {1}".format(i, wid)
@@ -119,11 +127,9 @@ def get_screen():
 
     return data
 
-####
-#
 # Load up the neural network
-#
-####
+
+print "Loading GoogleNet neural network"
 
 sess = tf.Session()
 
@@ -135,16 +141,23 @@ net.load('googlenet.tf', sess, ignore_missing = True)
 
 target = [net.layers[name] for name in net.layers if name == 'pool5_7x7_s1'][0]
 
-with open('classifiers') as f:
+test = sess.run(target, feed_dict = { tens : numpy.zeros((1, H, W, 3)) })[0]
+
+print "Neural network loaded"
+
+with open(args.classifiersFile) as f:
     classifiers = pickle.load(f)
 
-screen = pygame.display.set_mode((W, H))
+screen = pygame.display.set_mode((W + 200, H))
 
 clock = pygame.time.Clock()
 pygame.key.set_repeat(200, 25)
 font = pygame.font.SysFont("monospace", 15)
 
 msg = ""
+
+processTimes = []
+labels = classifiers.keys()
 
 class Global(object):
     def __init__(self, screen = None, W = None, H = None):
@@ -153,6 +166,7 @@ class Global(object):
         self.font = font
         self.W = W
         self.H = H
+        self.current_label_idx = 0
 
     def handle(self, event):
         ctrl_pressed = pygame.key.get_mods() & (pygame.KMOD_RCTRL | pygame.KMOD_LCTRL)
@@ -166,14 +180,17 @@ class Global(object):
                 sums = mahotas.labeled_sum(self.signal, ls)[1:]
                 coords = mahotas.center_of_mass(self.signal, ls)[1:]
 
-                print sums, coords
-
                 if len(coords) > 0:
                     ds = [numpy.linalg.norm(coord - [20.0, 15.0]) for mass, coord in zip(sums, coords) if mass >= 2]
 
                     closest = coords[numpy.argmin(ds)]
 
                     d2click(int(closest[0] * 16) + 8, int(closest[1] * 16) + 8, 3)
+            if event.key == pygame.K_RIGHT:
+                self.current_label_idx = min(len(labels) - 1, self.current_label_idx + 1)
+            if event.key == pygame.K_LEFT:
+                self.current_label_idx = max(0, self.current_label_idx - 1)
+                
         #try:
         #    self.selected.handle(event, self)
         #except Exception as e:
@@ -183,10 +200,11 @@ class Global(object):
         screen = get_screen()
         surf = pygame.surfarray.make_surface(numpy.rollaxis(screen, 1, 0))
         self.screen.blit(surf.convert(), (0, 0))
-
+        
+        tmp = time.time()
         hist = sess.run(target, feed_dict = { tens : screen.reshape(1, screen.shape[0], screen.shape[1], screen.shape[2]) })[0]
 
-        hist = classifiers['fallen'].predict(hist.reshape((-1, 1024))).reshape((self.H / 16, self.W / 16))
+        hist = classifiers[labels[self.current_label_idx]].predict(hist.reshape((-1, 1024))).reshape((self.H / 16, self.W / 16))
 
         self.signal = hist.copy()
 
@@ -202,8 +220,35 @@ class Global(object):
         
         nn = pygame.surfarray.make_surface(numpy.rollaxis(hist, 1, 0))
         nn.set_alpha(63)
+
+        processTimes.append(time.time() - tmp)
+
+        if len(processTimes) > 10:
+            processTimes.pop(0)
         
         self.screen.blit(nn, (0, 0))
+
+        lines = []
+        lines.append("FPS: {0:.2f} / s".format(1.0 / numpy.mean(processTimes)))
+        lines.append("")
+
+        lines.append("Detecting: ")
+        for label in labels:
+            if labels[self.current_label_idx] == label:
+                lines.append(" [x] {0}".format(label))
+            else:
+                lines.append(" [ ] {0}".format(label))
+        lines.append("")
+
+        lines.append("Arrows cycle which")
+        lines.append("   label is being displayed")
+
+        lines.append("")
+        #lines.append(self.msg)
+
+        for i, line in enumerate(lines):
+            label = font.render(line, 1, (255, 255, 255))
+            g.screen.blit(label, (g.W, 15 * i))
  
 g = Global(screen, W, H)
 
