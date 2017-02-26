@@ -25,16 +25,16 @@ class File(object):
 files = []
 
 if True:
-    vid = imageio.get_reader('follow.mp4', 'ffmpeg')
+    vid = imageio.get_reader('loops.mp4', 'ffmpeg')
 
     W, H = vid.get_meta_data()['size']
 
     F = vid.get_length()
     for i, frame in enumerate(vid):
-        if i > 200:
-            break
+        #if i > 200:
+        #    break
 
-        files.append(File('{0}, frame = {1}'.format('follow.mp4', i), frame))
+        files.append(File('{0}, frame = {1}'.format('loops.mp4', i), frame))
 
         print "Reading frame {0} / {1}".format(i, F)
 #%%
@@ -76,7 +76,15 @@ nn = sklearn.neighbors.NearestNeighbors(2)
 tmp = time.time()
 im1 = im2g(files[10].im)
 im2 = im2g(files[15].im)
+#%%
+tmp = time.time()
+pts = numpy.array(numpy.where(mahotas.thin(mahotas.regmax(peaks1 > 0.01)))).T
+pts2 = skimage.feature.corner_peaks(peaks1)
+#plt.imshow(, interpolation = 'NONE')
+print time.time() - tmp
+#%%
 peaks1 = get_harris(im1, 200)
+#%%
 peaks2 = get_harris(im2, 200)
 nn.fit(peaks1)
 stuff = brief.extract(im1, peaks1)
@@ -168,7 +176,7 @@ class BRIEF(object):
 
         return bits
 
-brf = BRIEF(256, 16, g = 1.0)
+brf = BRIEF(32, 16, g = 1.0)
 
 tmp = time.time()
 bits1 = brf.process(im1, peaks1)
@@ -197,6 +205,12 @@ plt.show()
 desc1 = brf.process(im1, peaks1)
 desc2 = brf.process(im2, peaks2)
 #%%
+reload(brief)
+
+tmp = time.time()
+pairs = brief.match(peaks1, peaks2, desc1, desc2)
+print time.time() - tmp
+#%%
 N = desc1.shape[0]
 
 tmp = time.time()
@@ -208,29 +222,42 @@ for i in range(N):
         distances[i, j] = numpy.linalg.norm(peaks1[i] - peaks2[j])
         hamming[i, j] = (desc1[i] == desc2[j]).sum()
 
-pairs = []
+def match(distances, hamming, t = 0.0):
+    pairs = []
 
-for i in range(N):
-    j1 = -1
-    j2 = -1
-    max1 = 0
-    max2 = 0
-    for j in range(N):
-        if distances[i, j] < 64.0:
-            if hamming[i, j] > max1:
-                max2 = max1
-                max1 = hamming[i, j]
+    for i in range(N):
+        j1 = -1
+        j2 = -1
+        max1 = 0
+        max2 = 0
+        for j in range(N):
+            if distances[i, j] < 64.0:
+                if hamming[i, j] > max1:
+                    max2 = max1
+                    max1 = hamming[i, j]
 
-                j2 = j1
-                j1 = j
+                    j2 = j1
+                    j1 = j
 
-    if max1 > 0 and max2 > 0:
-        if float(max2) / max1 > 0.80:
-            pairs.append((i, j1))
+        if max1 > 0 and max2 > 0:
+            if float(max2) / max1 > t:
+                pairs.append((i, j1))
+
+    return pairs
+
+pairs1 = match(distances, hamming)
+pairs2 = match(distances.T, hamming.T)
+
+fpairs = []
+for i, j in pairs2:
+    if (j, i) in pairs1:
+        fpairs.append((j, i))
+
+pairs = fpairs
 
     #print i, j1, j2, max1, max2
 print time.time() - tmp
-
+#%%
 #matches = set()
 #for pair in pairs:
 #    if (pair[1], pair[0]) in pairs:
@@ -259,6 +286,63 @@ plt.show()
 
 print numpy.median([dxs, dys], axis = 1)
 
+#%%
+
+def get_offset(im1, im2):
+    #tmp = time.time()
+    im1 = im2g(im1)
+    im2 = im2g(im2)
+    #print time.time() - tmp
+
+    #tmp = time.time()
+    peaks1 = get_harris(im1, 200)
+    peaks2 = get_harris(im2, 200)
+    #print time.time() - tmp
+
+    #tmp = time.time()
+    desc1 = brf.process(im1, peaks1)
+    desc2 = brf.process(im2, peaks2)
+    #print time.time() - tmp
+
+    #tmp = time.time()
+    pairs = brief.match(peaks1, peaks2, desc1, desc2)
+    #print time.time() - tmp
+
+    #tmp = time.time()
+    dxs = []
+    dys = []
+
+    #plt.imshow(im1, cmap = plt.cm.gray)
+    for i, j in list(pairs):
+        x0, y0 = peaks1[i]
+        x1, y1 = peaks2[j]
+
+        dxs.append(x1 - x0)
+        dys.append(y1 - y0)
+
+        #plt.plot([y0, y1], [x0, x1], 'r-')
+
+    #plt.plot(peaks1[:, 1], peaks1[:, 0], '*w')
+    #plt.plot(peaks2[:, 1], peaks2[:, 0], 'ob')
+    #plt.gcf().set_size_inches((12, 12))
+    #plt.show()
+
+    return -numpy.median([dxs, dys], axis = 1)
+    #print time.time() - tmp
+#%%
+dxs = []
+tmp = time.time()
+for i, (f1, f2) in enumerate(zip(files[:-1], files[1:])):
+    #tmp = time.time()
+    dxs.append(get_offset(f1.im, f2.im))
+    #print dxs[-1]
+    #print "Processing offset {0} took {1} seconds".format(i, time.time() - tmp)
+print time.time() - tmp
+
+dxs = numpy.cumsum(dxs, axis = 0)
+#%%
+
+plt.plot(dxs[:, 1], dxs[:, 0])
 #%%
 plt.imshow(im1, cmap = plt.cm.gray)
 plt.show()
