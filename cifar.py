@@ -29,7 +29,7 @@ def _variable_with_weight_decay(name, shape, stddev, wd):
   return var
 
 
-def inference(images):
+def inference(images, Hb, Wb):
   """Build the CIFAR-10 model.
 
   Args:
@@ -96,18 +96,21 @@ def inference(images):
     biases = _variable_on_cpu('biases', [192], tf.constant_initializer(0.1))
     local4 = tf.nn.relu(tf.matmul(local3, weights) + biases, name=scope.name)
 
-  return tf.reshape(local4, (2, 2, -1))
+  return tf.reshape(local4, (Hb, Wb, -1))
 
 inp = None
 logits = None
 sess = None
 
-def init(im):
+def init(H, W):
     global inp, logits, sess
 
-    inp = tf.placeholder(tf.float32, shape = (1, im.shape[0], im.shape[1], 3))
+    Hb = H / 12
+    Wb = W / 12
 
-    logits = inference(inp)
+    inp = tf.placeholder(tf.float32, shape = (1, Hb * 12, Wb * 12, 3))
+
+    logits = inference(inp, Hb, Wb)
 
     # Restore the moving average version of the learned variables for eval.
     variable_averages = tf.train.ExponentialMovingAverage(0.9999)
