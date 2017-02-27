@@ -34,26 +34,13 @@ def get_offset(im1, im2):
 
     return -numpy.median([dxs, dys], axis = 1)
 
-def fftalign(im1, im2, resolution = 1):
-    f1 = skimage.color.rgb2gray(im1[::resolution, ::resolution])
-    f2 = skimage.color.rgb2gray(im2[::resolution, ::resolution])
-
-    F1 = numpy.fft.fft2(f1)
-    F2 = numpy.fft.fft2(f2)
-
-    Ftmp = F1 * F2.conj()
-    #Ftmp /= numpy.linalg.norm(Ftmp)
-
-    f = numpy.fft.fftshift(numpy.real(numpy.fft.ifft2(Ftmp)))
-    loc = numpy.unravel_index(f.argmax(), f.shape)
-    return numpy.linalg.norm(Ftmp), numpy.array([1, 1]) * resolution * (loc - numpy.array((f1.shape[0] / 2, f1.shape[1] / 2)))
-
-
 class Bot(object):
     def __init__(self):
         self.x = 0
         self.y = 0
         self.lscreen = None
+        self.lpeaks = None
+        self.ldesc = None
         self.lcall = 0.0
 
     def buildTargets(self, r, xmin, xmax, ymin, ymax):
@@ -111,49 +98,63 @@ class Bot(object):
 
         return x, y
 
+    def buildPeaksDesc(self, im):
+        im1 = sparse.rgb2g(im[:380])
+
+        peaks1 = sparse.harris(im1, 200)
+
+        desc1 = brf.process(im1, peaks1)
+
+        return peaks1, desc1
+
     def draw(self, screen, gl):
         if self.lscreen is None:
             self.lscreen = screen
-            self.buildTargets(100, -1000, 1000, -1000, 0)
+            self.lpeaks, self.ldesc = self.buildPeaksDesc(screen)
             self.lcall = time.time()
 
             return []
 
-        if (time.time() - self.lcall) > 0.075:
-            #S, (dy, dx) = fftalign(self.lscreen[:384], screen[:384], 2)
-            dy, dx = get_offset(self.lscreen, screen)
+        lpeaks, ldesc = self.lpeaks, self.ldesc
 
-            self.x += dx
-            self.y += dy
+        peaks, desc = self.buildPeaksDesc(screen)
+            
+        pairs = sparse.match(lpeaks, peaks, ldesc, desc)
 
-            self.lcall = time.time()
+        dxs = []
+        dys = []
 
-            self.lscreen = screen
+        nidx = set()
+        for i, j in list(pairs):
+            x0, y0 = lpeaks[i]
+            x1, y1 = peaks[j]
+
+            nidx.add(j)
+            
+            dxs.append(x1 - x0)
+            dys.append(y1 - y0)
+                
+        dy, dx = -numpy.median([dxs, dys], axis = 1)
+
+        self.x += dx
+        self.y += dy
+
+        self.lcall = time.time()
+
+        self.lscreen = screen
+        self.lpeaks = peaks#[nidx]
+        self.ldesc = desc#[nidx]
 
         surf = pygame.Surface((gl.W, gl.H), pygame.SRCALPHA)
         surf.fill((255, 255, 255, 0))
 
-        G = self.G
+        for j, peak in enumerate(self.lpeaks):
+            y, x = peak
 
-        locs = nx.get_node_attributes(G, 'loc')
-
-        for node in G.nodes():
-            if self.contains(locs[node]):
-                x, y = self.g2s(locs[node])
-                y = int(y)
-                x = int(x)
-                pygame.draw.circle(surf, [255, 255, 255], (x, y), 4)
-
-                for edge in G.edges(node):
-                    onode = edge[1]
-
-                    if self.contains(locs[onode]):
-                        x_, y_ = self.g2s(locs[onode])
-
-                        x_ = int(x_)
-                        y_ = int(y_)
-
-                        pygame.draw.line(surf, [255, 255, 255], (x, y), (x_, y_), 2)
+            if j in nidx:
+                pygame.draw.circle(surf, [255, 0, 0], (x, y), 2)
+            else:
+                pygame.draw.circle(surf, [255, 255, 255], (x, y), 2)
 
         gl.screen.blit(surf, (0, 0))
 
