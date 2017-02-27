@@ -11,6 +11,7 @@ import imageio
 import pickle
 import scipy
 import skimage.filters
+import cv2
 os.chdir('/home/bbales2/diablo')
 
 import matplotlib.pyplot as plt
@@ -76,15 +77,7 @@ nn = sklearn.neighbors.NearestNeighbors(2)
 tmp = time.time()
 im1 = im2g(files[10].im)
 im2 = im2g(files[15].im)
-#%%
-tmp = time.time()
-pts = numpy.array(numpy.where(mahotas.thin(mahotas.regmax(peaks1 > 0.01)))).T
-pts2 = skimage.feature.corner_peaks(peaks1)
-#plt.imshow(, interpolation = 'NONE')
-print time.time() - tmp
-#%%
 peaks1 = get_harris(im1, 200)
-#%%
 peaks2 = get_harris(im2, 200)
 nn.fit(peaks1)
 stuff = brief.extract(im1, peaks1)
@@ -127,56 +120,10 @@ for i, others in enumerate(nn.radius_neighbors(peaks2, 64.0, return_distance = F
         pairs.add((others[idxs[0]], i))
         #pairs.add((i, others[idxs[1]]))
 #%%
-import pyximport
-pyximport.install(reload_support = True)
+import sparse
+import time
 
-import brief
-reload(brief)
-
-class BRIEF(object):
-    def __init__(self, N, k = 32, g = 1.0):
-        self.N = N
-        self.g = g
-
-        pts = []
-
-        while len(pts) < 2 * N:
-            i = int(numpy.random.randn() * k / 5.0)
-            j = int(numpy.random.randn() * k / 5.0)
-
-            if i > -k // 2 and i < k // 2 and j > -k // 2 and j < k // 2:
-                pts.append((i, j))
-
-        self.pts1 = numpy.array(pts[:N], dtype = 'int')
-        self.pts2 = numpy.array(pts[len(self.pts1):], dtype = 'int')
-
-    def process(self, im, kp):
-        im = cv2.GaussianBlur(im, (0, 0), self.g)
-
-        return brief.process_(self.N, self.pts1, self.pts2, im, kp)
-
-    def process_reference(self, im, kp):
-        im = cv2.GaussianBlur(im, (0, 0), self.g)
-
-        bits = numpy.zeros((len(kp), self.N), dtype = 'uint8')
-
-        for i, c in enumerate(kp):
-            for j in range(self.N):
-                y1 = c[0] + self.pts1[j][0]
-                x1 = c[1] + self.pts1[j][1]
-
-                y2 = c[0] + self.pts2[j][0]
-                x2 = c[1] + self.pts2[j][1]
-
-                if y1 > 0 and y1 < im.shape[0] and y2 > 0 and y2 < im.shape[0] and x1 > 0 and x1 < im.shape[1] and x2 > 0 and x2 < im.shape[1]:
-                    #print 'hi', im[y1, x1] < im[y2, x2]
-                    bits[i, j] = int(im[y1, x1] > im[y2, x2])
-
-                    #print c[0], c[1], y1, x1, y2, x2, self.pts1[j], self.pts2[j]
-
-        return bits
-
-brf = BRIEF(32, 16, g = 1.0)
+brf = sparse.BRIEF(32, 16, g = 1.0)
 
 tmp = time.time()
 bits1 = brf.process(im1, peaks1)
@@ -202,11 +149,11 @@ plt.hist(xs, alpha = 0.5)
 plt.hist(ys, alpha = 0.5)
 plt.show()
 #%%
+tmp = time.time()
 desc1 = brf.process(im1, peaks1)
 desc2 = brf.process(im2, peaks2)
+print time.time() - tmp
 #%%
-reload(brief)
-
 tmp = time.time()
 pairs = brief.match(peaks1, peaks2, desc1, desc2)
 print time.time() - tmp
@@ -290,13 +237,13 @@ print numpy.median([dxs, dys], axis = 1)
 
 def get_offset(im1, im2):
     #tmp = time.time()
-    im1 = im2g(im1)
-    im2 = im2g(im2)
+    im1 = sparse.rgb2g(im1[:380])
+    im2 = sparse.rgb2g(im2[:380])
     #print time.time() - tmp
 
     #tmp = time.time()
-    peaks1 = get_harris(im1, 200)
-    peaks2 = get_harris(im2, 200)
+    peaks1 = sparse.harris(im1, 200)
+    peaks2 = sparse.harris(im2, 200)
     #print time.time() - tmp
 
     #tmp = time.time()
@@ -305,7 +252,7 @@ def get_offset(im1, im2):
     #print time.time() - tmp
 
     #tmp = time.time()
-    pairs = brief.match(peaks1, peaks2, desc1, desc2)
+    pairs = sparse.match(peaks1, peaks2, desc1, desc2)
     #print time.time() - tmp
 
     #tmp = time.time()

@@ -107,21 +107,24 @@ def d2click(y, x, t):
 
 window = gtk.gdk.window_foreign_new(wid)
 
-W, H = window.get_size()
+W_, H_ = window.get_size()
+W = 640
+H = 480
 
-screengrab = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False, 8, W, H)
+screengrab = gtk.gdk.Pixbuf(gtk.gdk.COLORSPACE_RGB, False, 8, W_, H_)
 
 def get_screen():
     screengrab.get_from_drawable(window,
                                  gtk.gdk.colormap_get_system(),
                                  0, 0, 0, 0,
-                                 W,
-                                 H)
+                                 W_,
+                                 H_)
 
     data = numpy.frombuffer(screengrab.get_pixels(), numpy.uint8)
-    data = data.reshape((H, screengrab.get_rowstride()))
-    data = data[:, :W * 3]
-    data = data.reshape((H, W, 3))
+    data = data.reshape((H_, screengrab.get_rowstride()))
+    data = data[:, :W_ * 3]
+    data = data.reshape((H_, W_, 3))
+    data = data[:H, :W]
 
     return data
 

@@ -6,6 +6,34 @@ import scipy
 import scipy.spatial
 import time
 
+import sparse
+
+brf = sparse.BRIEF(32, 16, g = 1.0)
+
+def get_offset(im1, im2):
+    im1 = sparse.rgb2g(im1[:380])
+    im2 = sparse.rgb2g(im2[:380])
+
+    peaks1 = sparse.harris(im1, 200)
+    peaks2 = sparse.harris(im2, 200)
+
+    desc1 = brf.process(im1, peaks1)
+    desc2 = brf.process(im2, peaks2)
+
+    pairs = sparse.match(peaks1, peaks2, desc1, desc2)
+
+    dxs = []
+    dys = []
+
+    for i, j in list(pairs):
+        x0, y0 = peaks1[i]
+        x1, y1 = peaks2[j]
+
+        dxs.append(x1 - x0)
+        dys.append(y1 - y0)
+
+    return -numpy.median([dxs, dys], axis = 1)
+
 def fftalign(im1, im2, resolution = 1):
     f1 = skimage.color.rgb2gray(im1[::resolution, ::resolution])
     f2 = skimage.color.rgb2gray(im2[::resolution, ::resolution])
@@ -92,7 +120,8 @@ class Bot(object):
             return []
 
         if (time.time() - self.lcall) > 0.075:
-            S, (dy, dx) = fftalign(self.lscreen[:384], screen[:384], 2)
+            #S, (dy, dx) = fftalign(self.lscreen[:384], screen[:384], 2)
+            dy, dx = get_offset(self.lscreen, screen)
 
             self.x += dx
             self.y += dy
