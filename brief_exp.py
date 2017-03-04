@@ -12,6 +12,7 @@ import pickle
 import scipy
 import skimage.filters
 import cv2
+import pystan
 os.chdir('/home/bbales2/diablo')
 
 import matplotlib.pyplot as plt
@@ -26,7 +27,7 @@ class File(object):
 files = []
 
 if True:
-    vid = imageio.get_reader('loops.mp4', 'ffmpeg')
+    vid = imageio.get_reader('camprun.mp4', 'ffmpeg')
 
     W, H = vid.get_meta_data()['size']
 
@@ -35,20 +36,205 @@ if True:
         #if i > 200:
         #    break
 
-        files.append(File('{0}, frame = {1}'.format('loops.mp4', i), frame))
+        files.append(File('{0}, frame = {1}'.format('camprun.mp4', i), frame))
 
         print "Reading frame {0} / {1}".format(i, F)
 #%%
-import cv2
 
-im = files[0].im
-plt.imshow(files[0].im)
+import sparse
+brf = sparse.BRIEF(32, 16, g = 1.0)
+import time
+import collections
+
+def peaksAndDesc(im):
+    im = sparse.rgb2g(im[:380])
+
+    peaks = sparse.harris(im, 200)
+
+    desc = brf.process(im, peaks)
+
+    return peaks, desc
+
+descByFrame = []
+allDesc = []
+for f in files[:]:
+    im = f.im
+
+    lpeaks, ldesc = peaksAndDesc(im)
+
+    descByFrame.append(ldesc)
+    allDesc.extend(ldesc)
+
+import sklearn.cluster
+#%%
+F = 20
+kmeans = sklearn.cluster.MiniBatchKMeans(F)
+
+tmp = time.time()
+for desc in descByFrame:
+    kmeans.partial_fit(desc)
+#kmeans.fit(numpy.array(allDesc))
+print time.time() - tmp
+
+import sklearn.linear_model
+import sklearn.cross_validation
+#%%
+X = []
+y = []
+for i, desc in enumerate(descByFrame):
+    counts = numpy.zeros(F)
+    tmp = time.time()
+    cls = kmeans.predict(desc.astype('float'))
+    for c in cls:
+        counts[c] += 1
+
+    counts /= sum(counts)
+    print time.time() - tmp
+
+    if i % 20 < 10:
+        X.append(counts)
+        y.append(i / 20)
+
+lr = sklearn.linear_model.LogisticRegression()
+
+print sklearn.cross_validation.cross_val_score(lr, X, y)
+
+lr.fit(X, y)
+
+plt.plot(y, lr.predict(X))
 plt.show()
 
-#img = (255 * skimage.color.rgb2gray(im)).astype('uint8')[:380]
+plt.imshow(lr.predict_log_proba(X), interpolation = 'NONE')
+
+print numpy.std(lr.predict(X) - y)
+
+#%%
+
+import seaborn
+
+model = """
+data {
+    int<lower=0> N;
+    vector[N] x;
+    vector[N] y;
+}
+
+parameters {
+    real a;
+    real b;
+    real sigma;
+}
+
+model {
+    for (i in 1:N)
+        y[i] ~ normal(x[i] * a + b, sigma);
+}
+
+generated quantities {
+    vector[N] yhat;
+
+    for (i in 1:N)
+        yhat[i] = normal_rng(x[i] * a + b, sigma);
+}
+"""
+
+m1 = pystan.StanModel(model_code = model)
+#%%
+fit = m1.sampling(data = {
+    "y" : y,
+    "x" : lr.predict(X),
+    "N" : len(y)
+    })
+#%%
+print fit
+#%%
+
+    peaks, desc = peaksAndDesc(im)
+
+    pairs = sparse.match(lpeaks, peaks, ldesc, desc)
+
+    dxs = []
+    dys = []
+
+    for i, j in list(pairs):
+        x0, y0 = lpeaks[i]
+        x1, y1 = peaks[j]
+
+        dxs.append(x1 - x0)
+        dys.append(y1 - y0)
+
+    dx = -numpy.median([dxs, dys], axis = 1)
+
+    x += dx
+
+    for i, j in list(pairs):
+        x1, y1 = peaks[j]
+
+        tracked.append((y1 - 220 + x[0], x1 - 320 + x[1]))
+
+    lpeaks = peaks
+    ldesc = desc
+    lim = im
+    #print time.time() - tmp
+#%%
+lpeaks = None
+ldesc = None
+lim = None
+
+tracked = list()
+
+x = numpy.zeros(2)
+for f in files[:10]:
+    im = f.im
+
+    if lpeaks is None:
+        lim = im
+        lpeaks, ldesc = peaksAndDesc(im)
+
+    peaks, desc = peaksAndDesc(im)
+
+    pairs = sparse.match(lpeaks, peaks, ldesc, desc)
+
+    dxs = []
+    dys = []
+
+    for i, j in list(pairs):
+        x0, y0 = lpeaks[i]
+        x1, y1 = peaks[j]
+
+        dxs.append(x1 - x0)
+        dys.append(y1 - y0)
+
+    dx = -numpy.median([dxs, dys], axis = 1)
+
+    x += dx
+
+    for i, j in list(pairs):
+        x1, y1 = peaks[j]
+
+        tracked.append((y1 - 220 + x[0], x1 - 320 + x[1]))
+
+    lpeaks = peaks
+    ldesc = desc
+    lim = im
+    #print time.time() - tmp
+#%%
+tracked = numpy.array(tracked)
+
+plt.plot(tracked[:, 1], tracked[:, 0], '+')
+#%%
+dxs = []
+tmp = time.time()
+for i, (f1, f2) in enumerate(zip(files[:-1], files[1:])):
+    #tmp = time.time()
+    dxs.append(get_offset(f1.im, f2.im))
+    #print dxs[-1]
+    #print "Processing offset {0} took {1} seconds".format(i, time.time() - tmp)
+print time.time() - tmp
+
+dxs = numpy.cumsum(dxs, axis = 0)
 #%%
 import skimage.feature
-import time
 orb = skimage.feature.ORB(n_keypoints = 200, n_scales = 1)
 tmp = time.time()
 #features = orb.detect_and_extract(img)
@@ -120,7 +306,6 @@ for i, others in enumerate(nn.radius_neighbors(peaks2, 64.0, return_distance = F
         pairs.add((others[idxs[0]], i))
         #pairs.add((i, others[idxs[1]]))
 #%%
-import sparse
 import time
 
 brf = sparse.BRIEF(32, 16, g = 1.0)
