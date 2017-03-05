@@ -67,7 +67,7 @@ for f in files[:]:
 
 import sklearn.cluster
 #%%
-F = 20
+F = 50
 kmeans = sklearn.cluster.MiniBatchKMeans(F)
 
 tmp = time.time()
@@ -81,19 +81,19 @@ import sklearn.cross_validation
 #%%
 X = []
 y = []
+tmp = time.time()
 for i, desc in enumerate(descByFrame):
     counts = numpy.zeros(F)
-    tmp = time.time()
     cls = kmeans.predict(desc.astype('float'))
     for c in cls:
         counts[c] += 1
 
     counts /= sum(counts)
-    print time.time() - tmp
 
     if i % 20 < 10:
         X.append(counts)
-        y.append(i / 20)
+        y.append((i / 20, 5))
+print time.time() - tmp
 
 lr = sklearn.linear_model.LogisticRegression()
 

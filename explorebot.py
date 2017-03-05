@@ -9,42 +9,24 @@ import matplotlib.pyplot as plt
 import traceback
 import time
 import argparse
+import threading
 
 pygame.init()
 
 import subprocess
 import gtk
 import explorer
+# These are some xtool helper functions
+import interface
 
 parser = argparse.ArgumentParser(description='Run a Diablo 2 bot')
-#parser.add_argument('classifiersFile', help = 'File that has the trained classifiers')
+parser.add_argument('botFile', help = 'File to save bot in')
 parser.add_argument('--windowName', type = str, default = "Diablo II.exe", help = 'Window name for the running Diablo 2')
-
-# These are some xtool helper functions
 
 args = parser.parse_args()
 
-def get_mouse_location():
-    stdout, _ = subprocess.Popen('xdotool getmouselocation', shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
-
-    out = dict(entry.split(':') for entry in stdout.split(' '))
-
-    return int(out['y']), int(out['x']), int(out['window'])
-
-def click_relative(y, x, t, window):
-    _, _ = subprocess.Popen('xdotool mousemove --window {0} {1} {2}'.format(window, x, y), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
-
-    _, _ = subprocess.Popen('xdotool click --window {0} {1}'.format(window, t), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
-
-    return
-
-def refocus(y, x, window):
-    _, _ = subprocess.Popen('xdotool mousemove {0} {1}'.format(x, y), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
-
-    _, _ = subprocess.Popen('xdotool windowfocus {0}'.format(window), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
-
 # Locate a running Diablo II.exe to latch on to
-    
+
 sp = subprocess.Popen('xdotool search --name "{0}"'.format(args.windowName), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)
 
 stdout, stderr = sp.communicate()
@@ -98,12 +80,7 @@ elif len(wids) > 1:
 
 print "Diablo 2 exe found"
 
-def d2click(y, x, t):
-    yt, xt, wt = get_mouse_location()
-
-    click_relative(y, x, t, wid)
-
-    refocus(yt, xt, wt)
+mouse = interface.Mouse(wid)
 
 window = gtk.gdk.window_foreign_new(wid)
 
@@ -124,7 +101,7 @@ def get_screen():
     data = data.reshape((H_, screengrab.get_rowstride()))
     data = data[:, :W_ * 3]
     data = data.reshape((H_, W_, 3))
-    data = data[:H, :W]
+    data = data[22 : H + 22, 3 : W + 3]
 
     return data
 
@@ -140,16 +117,38 @@ msg = ""
 
 processTimes = []
 
-e = explorer.Bot()
-
 class Global(object):
-    def __init__(self, screen = None, W = None, H = None, bots = []):
+    def __init__(self, screen = None, W = None, H = None):
         self.screen = screen
         self.selected = None
         self.font = font
         self.W = W
         self.H = H
-        self.bots = bots
+        self.reloadBot()
+        self.tick()
+
+    def reloadBot(self):
+        try:
+            with open(args.botFile) as f:
+                self.bot = pickle.load(f)
+        except:
+            self.resetBot()
+
+    def resetBot(self):
+        self.bot = explorer.Bot()
+
+    def saveBot(self):
+        with open(args.botFile, 'w') as f:
+            pickle.dump(self.bot, f)
+
+    def tick(self):
+        try:
+            self.bot.tick()
+        except Exception as e:
+            traceback.print_exc()
+            print "Error in tick: {0}".format(e)
+        
+        threading.Timer(0.25, self.tick).start()
 
     def handle(self, event):
         ctrl_pressed = pygame.key.get_mods() & (pygame.KMOD_RCTRL | pygame.KMOD_LCTRL)
@@ -158,10 +157,14 @@ class Global(object):
 
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_r:
-                pass
+                self.reloadBot()
+            elif event.key == pygame.K_c:
+                self.resetBot()
+            elif event.key == pygame.K_s:
+                self.saveBot()
 
-        for bot in self.bots:
-            bot.handle(event, self)
+        #for bot in self.bots:
+        self.bot.handle(event, self)
         #try:
         #    self.selected.handle(event, self)
         #except Exception as e:
@@ -176,8 +179,7 @@ class Global(object):
         self.screen.blit(surf.convert(), (0, 0))
 
         botlines = []
-        for bot in self.bots:
-            botlines.extend(bot.draw(screen, self))
+        botlines.extend(self.bot.draw(screen, self))
 
         processTimes.append(time.time() - tmp)
 
@@ -197,7 +199,7 @@ class Global(object):
             label = font.render(line, 1, (255, 255, 255))
             g.screen.blit(label, (g.W, 15 * i))
  
-g = Global(screen, W, H, [e])
+g = Global(screen, W, H)
 
 while 1:
     for event in pygame.event.get():
