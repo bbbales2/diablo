@@ -25,6 +25,7 @@ class Bot(object):
         self.plock = threading.Lock()
         self.age = 0
         self.brf = sparse.BRIEF(32, 16, g = 1.0)
+        self.target = None
 
         self.G = None
         self.neighbors = None
@@ -112,17 +113,15 @@ class Bot(object):
         
         d, i = self.neighbors.query((self.x, self.y), 1)
 
-        if d > 100.0:
+        if d > 200.0:
             return True
         else:
             x, y = tuple(self.neighbors.data[i].astype('int'))
 
             node = self.G.node[(x, y)]
 
-            if self.age - node['age'] > 200.0:
+            if self.age - node['age'] > 1000.0 and (x, y) != self.target:
                 self.G.remove_node((x, y))
-
-                print "Removing ", (x, y)
 
                 self.updateNeighbors()
 
@@ -136,9 +135,13 @@ class Bot(object):
         else:
             return False
 
-    def handle(self, event, gl):
-        pass
-
+    def handle(self, event, gl): 
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_g:
+                i = numpy.random.randint(0, len(self.neighbors.data))
+                
+                self.target = tuple(self.neighbors.data[i].astype('int'))
+                
     def g2s(self, g):
         y = -(self.y - g[1]) + 220
         x = -(self.x - g[0]) + 320
@@ -154,7 +157,7 @@ class Bot(object):
 
         return peaks1, desc1
 
-    def tick(self):
+    def tick(self, gl):
         self.lock.acquire()
 
         dx = numpy.sqrt(numpy.array(self.dxs)**2 + numpy.array(self.dys)**2)
@@ -169,6 +172,29 @@ class Bot(object):
         if self.needSnapshot():
             self.snapshot()
             print "Snapshot"
+
+        if self.target is not None:
+            d, i = self.neighbors.query((self.x, self.y), 1)
+
+            x, y = self.neighbors.data[i].astype('int')
+
+            if (x, y) == self.target:
+                self.target = None
+
+                gl.mouse.click(self.g2s((x, y)), 1)
+
+                return
+
+            path = nx.shortest_path(self.G, (x, y), self.target)
+
+            dv = numpy.array(self.target) - numpy.array((x, y))
+            dv = dv.astype('float')
+
+            dv /= numpy.linalg.norm(dv)
+
+            dv *= 150.0
+
+            gl.mouse.click(self.g2s((self.x + dv[0], self.y + dv[1])), 1)
 
     def get_offset(self, lpeaks, peaks, ldesc, desc, return_nidx = False):
         pairs = sparse.match(lpeaks, peaks, ldesc, desc)
@@ -236,11 +262,16 @@ class Bot(object):
             for d, i in zip(*self.neighbors.query((self.x, self.y), 10)):
                 if numpy.isinf(d):
                     continue
+
+                x, y = self.neighbors.data[i].astype('int')
                 
-                lx, ly = self.g2s(self.neighbors.data[i])
+                lx, ly = self.g2s((x, y))
 
                 if lx >=0 and lx < gl.W and ly >= 0 and ly < gl.H:
-                    pygame.draw.circle(surf, [0, 255, 0], (int(lx), int(ly)), 3)
+                    if self.target == (x, y):
+                        pygame.draw.circle(surf, [255, 255, 0], (int(lx), int(ly)), 5)
+                    else:
+                        pygame.draw.circle(surf, [0, 255, 0], (int(lx), int(ly)), 3)
 
         gl.screen.blit(surf, (0, 0))
 

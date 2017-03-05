@@ -24,9 +24,9 @@ class Mouse(object):
     def __init__(self, window):
         self.wid = window
 
-    def d2click(y, x, t = 2):
+    def click(self, (x, y), t = 1):
         yt, xt, wt = get_mouse_location()
         
-        click_relative(y, x, t, self.wid)
+        click_relative(int(y) + 22, int(x) + 3, t, self.wid)
         
         refocus(yt, xt, wt)

@@ -124,6 +124,7 @@ class Global(object):
         self.font = font
         self.W = W
         self.H = H
+        self.mouse = mouse
         self.reloadBot()
         self.tick()
 
@@ -143,7 +144,7 @@ class Global(object):
 
     def tick(self):
         try:
-            self.bot.tick()
+            self.bot.tick(self)
         except Exception as e:
             traceback.print_exc()
             print "Error in tick: {0}".format(e)
