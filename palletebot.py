@@ -151,14 +151,14 @@ class Global(object):
 
         trunk = cv2.cvtColor(screen, cv2.COLOR_RGB2HSV)
 
-        trunk[:, :, 0] = numpy.left_shift(numpy.right_shift(trunk[:, :, 0], 0), 0)
-        trunk[:, :, 1] = numpy.left_shift(numpy.right_shift(trunk[:, :, 1], 0), 0)
-        trunk[:, :, 2] = numpy.left_shift(numpy.right_shift(trunk[:, :, 2], 6), 6)
+        #trunk[:, :, 0] = numpy.left_shift(numpy.right_shift(trunk[:, :, 0], 0), 0)
+        #trunk[:, :, 1] = numpy.left_shift(numpy.right_shift(trunk[:, :, 1], 0), 0)
+        #trunk[:, :, 2] = numpy.left_shift(numpy.right_shift(trunk[:, :, 2], 5), 5)
 
-        trunk = cv2.cvtColor(trunk, cv2.COLOR_HSV2RGB)
+        #trunk = cv2.cvtColor(trunk, cv2.COLOR_HSV2RGB)
 
-        trunk = trunk.sum(axis = 2)
-        trunk = (trunk > 10).astype('float')
+        #trunk = trunk.sum(axis = 2)
+        trunk = (trunk[:, :, 2] > 75).astype('float')
 
         trunk = (plt.cm.viridis(trunk)[:, :, :3] * 254).astype('uint8')
 
