@@ -12,6 +12,8 @@ def click_relative(y, x, t, window):
 
     _, _ = subprocess.Popen('xdotool click --window {0} {1}'.format(window, t), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
 
+    _, _ = subprocess.Popen('xdotool type --window {1} {0}'.format('c', window), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
+
     return
 
 def refocus(y, x, window):
@@ -19,8 +21,18 @@ def refocus(y, x, window):
 
     _, _ = subprocess.Popen('xdotool windowfocus {0}'.format(window), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
 
+def focus(y, x, window):
+    _, _ = subprocess.Popen('xdotool windowfocus {0}'.format(window), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
 
-class Mouse(object):
+def press(string, window):
+    stdout, _ = subprocess.Popen('xdotool getactivewindow', shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
+
+    owindow = stdout.strip()
+
+    _, _ = subprocess.Popen('xdotool windowactivate --sync {0} key {1} windowactivate {2}'.format(window, string, owindow), shell = True, stdout = subprocess.PIPE, stderr = subprocess.PIPE).communicate()
+
+
+class MouseKeyboard(object):
     def __init__(self, window):
         self.wid = window
 
@@ -30,3 +42,7 @@ class Mouse(object):
         click_relative(int(y) + 22, int(x) + 3, t, self.wid)
         
         refocus(yt, xt, wt)
+
+    def press(self, string):
+        print 'HI'
+        press(string, self.wid)
