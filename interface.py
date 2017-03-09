@@ -44,5 +44,4 @@ class MouseKeyboard(object):
         refocus(yt, xt, wt)
 
     def press(self, string):
-        print 'HI'
         press(string, self.wid)

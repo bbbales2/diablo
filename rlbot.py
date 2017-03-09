@@ -10,6 +10,8 @@ import traceback
 import time
 import argparse
 import threading
+import tempfile
+import gzip
 
 pygame.init()
 
@@ -124,15 +126,26 @@ class Global(object):
         self.font = font
         self.W = W
         self.H = H
-        self.reloadBot()
+        self.ticks = 0
+        self.mk = mk
+        self.resetBot()
         self.tick()
 
-    def reloadBot(self):
-        try:
-            with open(args.botFile) as f:
-                self.bot = pickle.load(f)
-        except:
-            self.resetBot()
+    def getScreen(self):
+        return get_screen()
+
+    def resetGame(self):
+        self.ticks = 0
+        mk.press("Escape")
+        time.sleep(0.1)
+        mk.click((282, 199)) # Save and exit
+        time.sleep(1.0)
+        mk.click((403, 303)) # Single Player
+        time.sleep(0.25)
+        mk.click((690, 543)) # Okay (character select)
+        time.sleep(4.0)
+        self.resetBot()
+        self.tick()
 
     def resetBot(self):
         self.bot = rl.Bot()
@@ -143,13 +156,21 @@ class Global(object):
 
     def tick(self):
         try:
-            pass
-            #self.bot.tick(self)
+            self.bot.tick(self)
+            self.ticks += 1
         except Exception as e:
             traceback.print_exc()
             print "Error in tick: {0}".format(e)
-        
-        threading.Timer(0.25, self.tick).start()
+            
+        if self.ticks == 10:
+            with tempfile.NamedTemporaryFile(dir = '/home/bbales2/diablo/trials', delete = False) as f:
+                gzf = gzip.GzipFile(mode = 'wb', fileobj = f)
+                pickle.dump(self.bot.recording, gzf)
+                gzf.close()
+
+            self.resetGame()
+        else:
+            threading.Timer(1.0, self.tick).start()
 
     def handle(self, event):
         ctrl_pressed = pygame.key.get_mods() & (pygame.KMOD_RCTRL | pygame.KMOD_LCTRL)
@@ -171,11 +192,9 @@ class Global(object):
 
         if event.type == pygame.KEYUP:
             if event.key == pygame.K_c:
-                mk.press('c')
+                mk.click((257, 421))
             elif event.key == pygame.K_r:
-                mk.press('Escape')
-                mk.press('Up')
-                mk.press('Return')
+                self.bot_reset()
 
         #for bot in self.bots:
         self.bot.handle(event, self)
@@ -193,7 +212,7 @@ class Global(object):
         self.screen.blit(surf.convert(), (0, 0))
 
         botlines = []
-        #botlines.extend(self.bot.draw(screen, self))
+        botlines.extend(self.bot.draw(screen, self))
 
         processTimes.append(time.time() - tmp)
 
